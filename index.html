@@ -274,7 +274,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </div>
 
   <button class="checkout-btn" id="checkout-btn" disabled onclick="openModal()">Reserve my tickets</button>
-  <p class="payment-note">🔒 QR ticket sent by email instantly after booking</p>
+  <p class="payment-note">🔒 QR ticket generated instantly — screenshot it at confirmation</p>
 </div>
 
 <!-- MODAL BOOKING -->
@@ -327,7 +327,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="step-success" class="hidden success-wrap">
       <div class="success-icon">🎉</div>
       <h2>Booking confirmed!</h2>
-      <p>Your QR ticket has been sent to<br><strong id="confirm-email" style="color:#AFA9EC;"></strong></p>
+      <p>Screenshot your QR code and present it at boarding.<br>Tap the button below to save it on your WhatsApp.</p>
       <div class="ref-badge" id="ref-badge"></div>
       <div class="qr-container">
         <canvas id="qr-canvas"></canvas>
@@ -336,7 +336,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="confirm-details" id="confirm-details"></div>
       <a class="btn-wa" id="btn-wa-confirm" href="#" target="_blank">
         <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.558 4.115 1.535 5.844L.057 23.492a.5.5 0 0 0 .615.612l5.756-1.51A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.794 9.794 0 0 1-5.003-1.371l-.359-.213-3.716.975.991-3.617-.232-.371A9.794 9.794 0 0 1 2.182 12C2.182 6.561 6.561 2.182 12 2.182S21.818 6.561 21.818 12 17.439 21.818 12 21.818z"/></svg>
-        Also notify organiser via WhatsApp
+        Send my ticket to my WhatsApp
       </a>
       <button class="btn-ghost" onclick="closeModal()">Close</button>
     </div>
@@ -522,17 +522,44 @@ async function submitBooking() {
       status: 'valid'
     });
 
-    // 2. Send confirmation email
-    await sendConfirmationEmail({ name, email, phone, ref, tickets: ticketsStr, totalStr: fmt(total), methodLabel, after });
-
-    // 3. Generate QR code on canvas
+    // 2. Generate QR code on canvas
     await QRCode.toCanvas(document.getElementById('qr-canvas'), ref, {
       width: 200,
       color: { dark: '#000000', light: '#ffffff' }
     });
 
+    // 3. Prepare WhatsApp messages
+    const buyerMsg = encodeURIComponent(
+      '🚢 *BLACK EMPIRE — Booking Confirmed!*\n\n' +
+      '📋 Ref: *' + ref + '*\n' +
+      '👤 Name: ' + name + '\n' +
+      '📅 Date: 04 July 2025 · 19:00 — 00:30\n' +
+      '📍 Location: Kabataş Yacht Port, Istanbul\n' +
+      '👗 Dress code: All White\n\n' +
+      '🎟️ Tickets:\n' + lines.join('\n') +
+      (after ? '\n🎉 After Party: Fox Club 02:00' : '') +
+      '\n\n💰 Total: ' + fmt(total) +
+      '\n💳 Payment: ' + methodLabel +
+      '\n\n📸 Screenshot your QR code — present it at boarding.'
+    );
+
+    const ownerMsg = encodeURIComponent(
+      '🔔 *New booking — Black Empire*\n\n' +
+      '📋 Ref: *' + ref + '*\n' +
+      '👤 ' + name + '\n' +
+      '📧 ' + email + '\n' +
+      '📱 ' + phone + '\n\n' +
+      lines.join('\n') +
+      (after ? '\n🎉 After Party: Fox Club' : '') +
+      '\n💰 Total: ' + fmt(total) +
+      '\n💳 ' + methodLabel
+    );
+
+    // Button to buyer's WhatsApp
+    const buyerPhone = phone.replace(/[\s\+\-\(\)]/g, '');
+    document.getElementById('btn-wa-confirm').href = 'https://wa.me/' + buyerPhone + '?text=' + buyerMsg;
+
     // 4. Show success
-    document.getElementById('confirm-email').textContent = email;
     document.getElementById('ref-badge').textContent = ref;
     document.getElementById('confirm-details').innerHTML =
       '<strong>Event:</strong> Black Empire · 04 July 2025<br>' +
@@ -543,13 +570,11 @@ async function submitBooking() {
       '<br><strong>Total:</strong> ' + fmt(total) +
       '<br><strong>Payment:</strong> ' + methodLabel;
 
-    const waMsg = encodeURIComponent(
-      'Hi! I just booked for Black Empire (04 July).\nRef: '+ref+
-      '\n'+lines.join('\n')+(after?'\n+ After Party':'')+
-      '\nTotal: '+fmt(total)+' | Payment: '+methodLabel
-    );
-    document.getElementById('btn-wa-confirm').href = 'https://wa.me/'+CONFIG.whatsapp+'?text='+waMsg;
     showStep('success');
+
+    // Auto-open WhatsApp to organiser to notify
+    const ownerWa = 'https://wa.me/' + CONFIG.whatsapp + '?text=' + ownerMsg;
+    setTimeout(() => { window.open(ownerWa, '_blank'); }, 1000);
 
   } catch(err) {
     console.error(err);
